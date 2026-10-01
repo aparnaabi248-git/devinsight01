@@ -1,0 +1,50 @@
+# DevInsight — environment variables (never commit real secrets)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# ML artefacts (large binaries; rebuilt by `python ml/training/run_all.py`)
+ml/artifacts/
+ml/reports/
+ml/mlruns/
+mlflow/data/
+data/raw/
+data/processed/
+data/features/
+data/*.db
+
+# Frontend
+node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/coverage/
+# TypeScript incremental build state - machine-specific, regenerated on build.
+*.tsbuildinfo
+
+# Scratch output: run logs and the bare partial-clone probe left over from
+# working out that `git clone --filter=blob:none` beats the rate-limited REST API.
+# Both are reproducible; neither belongs in the history.
+data/*.txt
+probe.git/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.log

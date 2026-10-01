@@ -1,0 +1,51 @@
+[project]
+name = "devinsight-ml"
+version = "1.0.0"
+description = "DevInsight ML pipeline — data engineering, feature engineering, training, evaluation"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+dependencies = [
+  "numpy>=1.26.0",
+  "pandas>=2.2.0",
+  "scipy>=1.13.0",
+  "scikit-learn>=1.5.0",
+  "xgboost>=2.1.0",
+  "joblib>=1.4.0",
+]
+
+[project.optional-dependencies]
+tracking = ["mlflow-skinny>=2.17.0"]
+dev = ["pytest>=8.0.0", "ruff>=0.6.0", "mypy>=1.11.0"]
+
+[tool.ruff]
+line-length = 95
+target-version = "py311"
+# The ml/ modules import each other as top-level packages (config, features, ...),
+# which ruff's default first-party rules do not infer from this layout.
+src = ["."]
+exclude = ["artifacts", "reports", "__pycache__"]
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "B", "C4", "UP", "SIM"]
+ignore = [
+  "E501",    # line length is handled by the formatter
+  "E741",    # `l` is a conventional label variable in taxonomy matching
+  "B008",    # sklearn's idiom of supplying callables in dicts
+  "B905",    # zip(strict=) is unnecessary: these sequences are aligned by construction
+  "E402",    # the ml/ modules rely on sys.path setup before sibling imports
+  "UP042",   # str + Enum is used deliberately so JSON serialises to the readable value
+  "SIM108",  # ternaries are not always clearer
+  "SIM115",  # long-lived caches use explicit open/close
+  "BLE001",  # a broad except is correct at the training-sweep boundary
+  "C416",    # the explicit comprehension is clearer than dict()
+]
+
+[tool.pytest.ini_options]
+testpaths = ["../backend/tests"]
+pythonpath = [".", ".."]
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
+no_strict_optional = true
+warn_unused_configs = true

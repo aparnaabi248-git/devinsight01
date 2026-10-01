@@ -1,0 +1,197 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master, develop]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.12"
+  NODE_VERSION: "22"
+
+jobs:
+  # ------------------------------------------------------------------ backend
+  backend:
+    name: Backend · lint, types, tests, schema
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: devinsight
+          POSTGRES_PASSWORD: devinsight
+          POSTGRES_DB: devinsight_test
+          POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
+
+      - name: Lint (ruff)
+        run: |
+          ruff check backend ml
+          ruff format --check backend ml
+
+      - name: Type check (mypy)
+        continue-on-error: true
+        run: mypy --ignore-missing-imports --no-strict-optional backend/app ml
+
+      - name: Verify the migration matches the ORM
+        env:
+          DATABASE_URL: postgresql+psycopg://devinsight:devinsight@localhost:5432/devinsight_test
+        run: |
+          cd backend
+          alembic upgrade head
+          # Compares tables, columns, nullability and primary keys. A migration that
+          # gets nullability wrong yields a database that looks fine and then rejects
+          # legitimate NULLs, which an existence-only check would not notice.
+          python scripts/check_schema.py
+
+      - name: Unit + API + access-control tests
+        env:
+          DATABASE_URL: postgresql+psycopg://devinsight:devinsight@localhost:5432/devinsight_test
+          MLFLOW_TRACKING_ENABLED: "false"
+        run: |
+          cd backend
+          pytest -q --cov=app --cov-report=term-missing --cov-report=xml \
+                 --cov-fail-under=65
+
+  # ----------------------------------------------------------------------- ml
+  ml:
+    name: ML · train, evaluate, assert metrics
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install ML dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
+
+      - name: Cache cloned repositories
+        uses: actions/cache@v4
+        with:
+          path: data/raw
+          key: git-repos-${{ hashFiles('ml/config.py') }}
+          restore-keys: git-repos-
+
+      - name: Acquire real training data
+        run: python ml/data/acquire.py --max-commits 1200
+
+      - name: Train all four models
+        env:
+          MLFLOW_TRACKING_ENABLED: "false"
+        run: |
+          cd ml
+          python training/run_all.py
+
+      - name: Assert artefacts and metrics are real
+        run: python tests/test_artifacts.py
+
+      - name: Upload evaluation reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ml-evaluation-reports
+          path: |
+            ml/reports/**
+            ml/artifacts/**/manifest.json
+          retention-days: 14
+
+  # ---------------------------------------------------------------- frontend
+  frontend:
+    name: Frontend · lint, typecheck, tests, build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund || npm install --no-audit --no-fund
+
+      - name: Lint
+        run: npx eslint src --ext .ts,.tsx --max-warnings 0 || true
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Component tests
+        run: npx vitest run --coverage
+
+      - name: Production build
+        env:
+          VITE_API_URL: /api
+        run: npm run build
+
+      - name: Upload build output
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist
+          retention-days: 7
+
+  # ----------------------------------------------------------------- security
+  security:
+    name: Security · secrets & dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+
+      - name: Fail on committed secrets
+        run: |
+          if git ls-files | xargs grep -Il --exclude-dir={node_modules,.git} \
+               -E 'ghp_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{50,}' 2>/dev/null; then
+            echo "::error::A GitHub token appears to be committed. Revoke it immediately."
+            exit 1
+          fi
+          echo "No committed GitHub tokens found."
+
+      - name: Fail on a committed .env
+        run: |
+          if git ls-files | grep -qx '.env'; then
+            echo "::error::.env must never be committed."
+            exit 1
+          fi
+          echo ".env is not tracked."
+
+      - name: Dependency audit (Python)
+        run: pip install pip-audit && pip-audit -r backend/requirements.txt --strict || true
+
+      - name: Dependency audit (npm)
+        working-directory: frontend
+        run: npm audit --audit-level=critical || true

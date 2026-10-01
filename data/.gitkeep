@@ -1,0 +1,6 @@
+# Keeps `data/` present in a fresh clone.
+#
+# Everything else under this directory is gitignored (raw clones, processed
+# CSVs, feature matrices, run logs), and git does not track empty directories.
+# Without this file `COPY data /app/data` in docker/backend.Dockerfile fails
+# on a newly cloned checkout, which broke `docker compose up -d --build`.

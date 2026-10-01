@@ -1,0 +1,52 @@
+# Build context hygiene. Without this every `docker build` ships ~300 MB of
+# node_modules, clones and caches to the daemon on each of the three images.
+
+# Version control / CI
+.git
+.github
+.gitignore
+probe.git
+
+# Python junk
+**/__pycache__
+**/*.py[cod]
+.venv
+venv
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+.coverage
+htmlcov
+
+# Frontend junk — the image runs its own `npm ci`.
+frontend/node_modules
+frontend/dist
+frontend/coverage
+frontend/.vite
+
+# Training inputs. The API serves PostgreSQL, not these CSVs, and they are
+# 118 MB of clones that a fresh checkout does not have anyway.
+data/raw
+data/processed
+data/features
+data/*.txt
+
+# Reproducible ML output. Deliberately NOT excluded: `ml/artifacts` holds the
+# four trained models the API loads at startup, and baking them in is what lets
+# a container serve predictions without retraining.
+ml/reports
+ml/mlruns
+mlflow/data
+
+# Secrets and local config
+.env
+.env.*
+*.pem
+*.key
+secrets/
+
+# Docs are not needed at runtime.
+docs
+
+# Logs / scratch
+*.log
