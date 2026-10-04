@@ -41,7 +41,7 @@ const configuredApiUrl = (import.meta.env.VITE_API_URL as string | undefined)?.t
 const BASE_URL = configuredApiUrl
   ? configuredApiUrl.startsWith('/') || /^https?:\/\//i.test(configuredApiUrl)
     ? configuredApiUrl.replace(/\/+$/, '')
-    : `https://${configuredApiUrl.replace(/\/+$/, '')}/api`
+    : `https://${configuredApiUrl.replace(/\/+$/, '')}${configuredApiUrl.includes('.') ? '' : '.onrender.com'}/api`
   : '/api';
 const TOKEN_KEY = 'devinsight.token';
 
