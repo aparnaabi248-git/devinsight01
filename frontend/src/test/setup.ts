@@ -8,7 +8,7 @@ afterEach(() => {
 });
 
 // jsdom has no Recharts ResponsiveContainer measurement by default.
-global.ResizeObserver = class {
+globalThis.ResizeObserver = class {
   observe() {}
   unobserve() {}
   disconnect() {}
