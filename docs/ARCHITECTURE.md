@@ -402,7 +402,7 @@ hand-crafted request gains nothing.
 | 14 | Frontend ↔ FastAPI | ✅ typed client, end-to-end verified |
 | 15 | Authentication | ✅ JWT + roles |
 | 16 | Dockerisation | ✅ compose, 4 services |
-| 17 | Automated testing | ✅ 196 backend + 36 frontend |
+| 17 | Automated testing | ✅ 205 backend + 48 frontend |
 | 18 | GitHub Actions CI/CD | ✅ ci + deploy |
 | 19 | Deployment | ✅ runbook + workflow |
 | 20 | Documentation | ✅ |
