@@ -83,7 +83,7 @@ function DefectRiskPanel() {
     <Card>
       <CardHeader
         title="Defect risk"
-        subtitle="Binary classifier over 48 leakage-free change features. LOW < 0.33 ≤ MEDIUM < 0.66 ≤ HIGH."
+        subtitle="Binary classifier over 49 leakage-free change features. LOW < 0.33 ≤ MEDIUM < 0.66 ≤ HIGH."
       />
       <div style={{ display: 'grid', gap: theme.space(3) }}>
         <Input label="Repository" value={repository} onChange={(e) => setRepository(e.target.value)} hint="owner/name" />
