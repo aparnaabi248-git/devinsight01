@@ -22,7 +22,8 @@ FROM python:3.12-slim AS runtime
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
-    PYTHONPATH=/app:/app/ml
+    PYTHONPATH=/app:/app/ml \
+    DEVINSIGHT_ROOT=/app
 
 RUN apt-get update \
  && apt-get install -y --no-install-recommends git curl \

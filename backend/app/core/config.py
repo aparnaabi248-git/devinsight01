@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Any
@@ -28,7 +29,9 @@ else:
     except ImportError:  # pragma: no cover - older pydantic-settings
         _CsvList = list[str]
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
+REPO_ROOT = Path(
+    os.environ.get("DEVINSIGHT_ROOT", str(Path(__file__).resolve().parents[3]))
+)
 
 
 class Settings(BaseSettings):
