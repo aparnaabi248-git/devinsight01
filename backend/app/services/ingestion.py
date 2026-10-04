@@ -584,6 +584,12 @@ def ingest_repository(
                 Issue.repository_id == repo.id, Issue.is_pull_request.is_(False)
             )
         ).scalar_one()
+        # Newest commit actually ingested, so a client can rank repositories by real
+        # activity without aggregating the commits table. `ingested_commits` alone ties
+        # whenever ingestion is capped per repository.
+        repo.latest_commit_at = db.execute(
+            select(func.max(Commit.authored_at)).where(Commit.repository_id == repo.id)
+        ).scalar_one_or_none()
 
         job.status = JobStatus.completed
         log.info(

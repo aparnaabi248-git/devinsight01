@@ -365,18 +365,17 @@ describe('API client', () => {
 });
 
 describe('defaultRepositoryId', () => {
-  const repo = (id: number, ingested_commits: number) =>
-    ({ id, ingested_commits }) as Repository;
+  const repo = (
+    id: number,
+    ingested_commits: number,
+    latest_commit_at: string | null = null,
+  ) => ({ id, ingested_commits, latest_commit_at }) as Repository;
 
   it('picks the repository with the most ingested history', () => {
     // Regression: Analytics and Contributors took `items[0]`, which is alphabetical -
     // so they opened on a freshly added 2-commit repo while the Dashboard showed
     // psf/requests. Contributors rendered "1 contributor, High bus factor risk".
-    const items = [
-      repo(8, 2),
-      repo(5, 900),
-      repo(1, 640),
-    ];
+    const items = [repo(8, 2, '2026-04-30'), repo(5, 900, '2026-09-28'), repo(1, 640)];
     expect(defaultRepositoryId(items)).toBe(5);
   });
 
@@ -391,20 +390,35 @@ describe('defaultRepositoryId', () => {
     expect(items.map((r) => r.id)).toEqual([8, 5]);
   });
 
-  it('falls back to the first item when every repository is empty', () => {
-    // Nothing ingested anywhere: still show something rather than an empty page.
-    const items = [repo(8, 0), repo(5, 0)];
-    expect(defaultRepositoryId(items)).toBe(5);
-  });
-
-  it('breaks a tie on the lowest id, so every page agrees', () => {
+  it('breaks a history tie on the most recently active repository', () => {
     // seed_local.py caps ingestion at 900 commits per repository, so the five OSS
-    // repositories tie exactly. Each page fetches a different sort order, so without a
-    // deterministic tie-break the Dashboard opened on psf/requests while Analytics and
-    // Contributors opened on pallets/flask.
-    const tied = [repo(8, 900), repo(5, 900), repo(2, 900), repo(9, 900)];
+    // repositories tie exactly and health_score ties too. Ranking on commits alone sent
+    // every page to encode/httpx, whose history ends six months before today, so the
+    // dashboard showed "0 commits in the last 30 days" and "0 active in 90 days".
+    const tied = [
+      repo(1, 900, '2026-03-29'), // encode/httpx  - stale
+      repo(2, 900, '2026-09-29'), // expressjs     - most recent
+      repo(3, 900, '2026-09-23'), // pallets/click
+      repo(4, 900, '2026-09-08'), // pallets/flask
+    ];
     expect(defaultRepositoryId(tied)).toBe(2);
     // Same answer no matter how the API sorted the list.
     expect(defaultRepositoryId([...tied].reverse())).toBe(2);
+  });
+
+  it('ignores recency when it would outweigh history', () => {
+    // A three-commit repository from last week must not outrank a 900-commit one.
+    const items = [repo(6, 3, '2026-10-01'), repo(5, 900, '2026-09-28')];
+    expect(defaultRepositoryId(items)).toBe(5);
+  });
+
+  it('treats a missing timestamp as oldest rather than newest', () => {
+    const items = [repo(4, 900, null), repo(2, 900, '2026-09-29')];
+    expect(defaultRepositoryId(items)).toBe(2);
+  });
+
+  it('breaks a total tie on the lowest id', () => {
+    const items = [repo(8, 0), repo(5, 0)];
+    expect(defaultRepositoryId(items)).toBe(5);
   });
 });

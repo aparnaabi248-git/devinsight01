@@ -171,6 +171,7 @@ class RepositoryOut(BaseModel):
     ingested_commits: int
     ingested_issues: int
     health_score: float = 0.0
+    latest_commit_at: datetime | None = None
     created_at: datetime
 
 

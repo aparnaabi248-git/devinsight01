@@ -65,6 +65,11 @@ class Repository(Base, TimestampMixin):
     last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     ingested_commits: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     ingested_issues: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # Newest commit timestamp actually ingested. Maintained by the ingestion service.
+    # Lets the client pick a meaningful default repository without aggregating commits.
+    latest_commit_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), index=True
+    )
 
     commits: Mapped[list[Commit]] = relationship(
         back_populates="repository", cascade="all, delete-orphan"

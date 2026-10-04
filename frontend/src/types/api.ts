@@ -53,6 +53,8 @@ export interface Repository {
   ingested_commits: number;
   ingested_issues: number;
   health_score: number;
+  /** Newest commit actually ingested; null before anything has been ingested. */
+  latest_commit_at: string | null;
   created_at: string;
 }
 
