@@ -25,7 +25,20 @@ file, migrates the database, and recreates the services. For a larger install, r
 images directly on a managed platform and point `DATABASE_URL` and
 `MLFLOW_TRACKING_URI` at managed services.
 
-## 2. First-time server setup
+## 2. Free Render demo
+
+Use the [Render deploy link](https://render.com/deploy?repo=https%3A%2F%2Fgithub.com%2Faparnaabi248-git%2Fdevinsight01)
+to create the Blueprint from `render.yaml`. Sign in to Render, review the resources,
+then create the static site, API, and PostgreSQL database. Render generates the API
+secret and wires the database and frontend origins from the Blueprint.
+
+The free API sleeps after 15 minutes without traffic, so its first request after idle can
+take about a minute. The free database is limited to 1 GB and expires 30 days after
+creation; export any data you need before then. The API uses an ephemeral filesystem, so
+local model/cache files do not persist. This configuration is for a demo, not production.
+Upgrade the database and API plan for durable, always-on use.
+
+## 3. First-time server setup
 
 ```bash
 # --- base OS and Docker -------------------------------------------------
@@ -42,7 +55,7 @@ curl -fsSLo .env.example \
   https://raw.githubusercontent.com/aparnaabi248-git/devinsight01/master/.env.example
 ```
 
-## 3. Secrets
+## 4. Secrets
 
 The VPS runtime `.env` stays on the VPS; never commit it or bake it into an image.
 
@@ -69,7 +82,7 @@ chmod 600 .env
 
 Never expose `GITHUB_TOKEN` to the browser. The frontend bundle contains only a URL.
 
-## 4. GitHub Actions setup
+## 5. GitHub Actions setup
 
 In the deployment repository's **Settings → Secrets and variables → Actions**, add these
 repository secrets:
@@ -100,7 +113,7 @@ bound to loopback only. For an internet-facing production site, put a TLS revers
 such as Caddy in front of `127.0.0.1:8080` and configure DNS and HTTPS before directing
 users to it. Do not expose ports `5432`, `5000`, or `8000` through the VPS firewall.
 
-## 5. Database
+## 6. Database
 
 ### Migrations
 
@@ -131,7 +144,7 @@ gunzip -c /var/backups/devinsight-2025-06-01.dump.gz \
 Point-in-in-time recovery: enable WAL archiving on the managed instance, or run
 `pgBackRest` for a self-hosted PostgreSQL.
 
-## 6. First release
+## 7. First release
 
 ```bash
 cd ~/devinsight
@@ -161,7 +174,7 @@ curl -s -X POST http://localhost:8000/api/ml/defect-risk \
   -d '{"repository":"pallets/click","changes":[{"path":"src/click/core.py","additions":180,"deletions":40}]}' | jq
 ```
 
-## 7. Rollout
+## 8. Rollout
 
 `docker-compose.yml` uses named volumes, so a rollout replaces containers without losing
 the ETL raw store, the trained artefacts, the reports or the MLflow store.
@@ -184,7 +197,7 @@ The API is stateless, so it scales horizontally behind a load balancer. The comp
 uses `docker compose up -d`, which restarts containers in place — fine for a single node.
 For true zero downtime, run two API replicas and drain one at a time.
 
-## 8. Scaling
+## 9. Scaling
 
 | Symptom | Action |
 |---|---|
@@ -195,7 +208,7 @@ For true zero downtime, run two API replicas and drain one at a time.
 | `commits` table very large | Range-partition on `authored_at` (see `docs/DATABASE.md` §4) |
 | Slow trend queries | Pre-materialise `analytics_snapshots` per day instead of scanning facts |
 
-## 9. Monitoring
+## 10. Monitoring
 
 | Signal | Where | Action on breach |
 |---|---|---|
@@ -208,7 +221,7 @@ For true zero downtime, run two API replicas and drain one at a time.
 Ship logs to your aggregator with `LOG_JSON=true` (the logger already emits structured,
 redacted JSON).
 
-## 10. Backup and recovery targets
+## 11. Backup and recovery targets
 
 | Data | Method | RPO | RTO |
 |---|---|---|---|
@@ -217,7 +230,7 @@ redacted JSON).
 | MLflow store | File volume snapshot → object storage | 24 h | < 1 h |
 | Raw ETL data | Disposable — re-cloneable with `acquire.py` | n/a | Minutes |
 
-## 11. Security checklist
+## 12. Security checklist
 
 - [ ] `SECRET_KEY` is a fresh 32-byte random value, not the template default
 - [ ] `GITHUB_TOKEN` is fine-grained and read-only

@@ -125,9 +125,10 @@ class Settings(BaseSettings):
     def sqlalchemy_url(self) -> str:
         if self.DATABASE_URL:
             url = self.DATABASE_URL
-            # Normalise the common `postgres://` alias used by hosting providers.
             if url.startswith("postgres://"):
-                url = url.replace("postgres://", "postgresql://", 1)
+                url = url.replace("postgres://", "postgresql+psycopg://", 1)
+            elif url.startswith("postgresql://"):
+                url = url.replace("postgresql://", "postgresql+psycopg://", 1)
             return url
         return (
             f"postgresql+psycopg://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}"

@@ -1,0 +1,54 @@
+services:
+  - type: web
+    name: devinsight-api
+    runtime: docker
+    plan: free
+    region: oregon
+    dockerContext: .
+    dockerfilePath: ./docker/backend.Dockerfile
+    dockerCommand: >-
+      sh -c 'export CORS_ORIGINS="https://${FRONTEND_HOST}" &&
+      alembic upgrade head &&
+      exec uvicorn app.main:app --host 0.0.0.0 --port "${PORT:-10000}" --proxy-headers'
+    healthCheckPath: /api/health
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: DEBUG
+        value: "false"
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DATABASE_URL
+        fromDatabase:
+          name: devinsight-db
+          property: connectionString
+      - key: FRONTEND_HOST
+        fromService:
+          type: web
+          name: devinsight-web
+          property: host
+      - key: LOG_JSON
+        value: "true"
+
+  - type: static
+    name: devinsight-web
+    buildCommand: npm ci --prefix frontend && npm run build --prefix frontend
+    staticPublishPath: ./frontend/dist
+    envVars:
+      - key: VITE_API_URL
+        fromService:
+          type: web
+          name: devinsight-api
+          property: host
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+
+databases:
+  - name: devinsight-db
+    plan: free
+    region: oregon
+    databaseName: devinsight
+    user: devinsight
+    ipAllowList: []

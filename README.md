@@ -538,10 +538,14 @@ See **[`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)** for the full runbook: VPS set
 secrets management, migrations, zero-downtime rollout, backup and restore, scaling, and
 monitoring.
 
-Quick path: prepare a VPS and its runtime `.env`, set the `DEPLOY_HOST`, `DEPLOY_USER`,
+For a free demo on Render, use the [Render deploy link](https://render.com/deploy?repo=https%3A%2F%2Fgithub.com%2Faparnaabi248-git%2Fdevinsight01)
+and create the Blueprint. Render will provision a static frontend, API, and PostgreSQL
+database. Free API instances sleep when idle, and the free database expires after 30 days;
+this setup is for demos, not production.
+
+For an always-on VPS deployment, set the `DEPLOY_HOST`, `DEPLOY_USER`,
 `DEPLOY_SSH_KEY`, and `DEPLOY_KNOWN_HOSTS` repository secrets, then run the **Deploy**
-workflow or push a `v*` release tag. See the runbook for GHCR package access and setup
-details.
+workflow or push a `v*` release tag. See the runbook for GHCR package access and setup.
 
 ## 16. Testing
 

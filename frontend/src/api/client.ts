@@ -37,7 +37,12 @@ import type {
   User,
 } from '@/types/api';
 
-const BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? '/api';
+const configuredApiUrl = (import.meta.env.VITE_API_URL as string | undefined)?.trim();
+const BASE_URL = configuredApiUrl
+  ? configuredApiUrl.startsWith('/') || /^https?:\/\//i.test(configuredApiUrl)
+    ? configuredApiUrl.replace(/\/+$/, '')
+    : `https://${configuredApiUrl.replace(/\/+$/, '')}/api`
+  : '/api';
 const TOKEN_KEY = 'devinsight.token';
 
 export class ApiError extends Error {
