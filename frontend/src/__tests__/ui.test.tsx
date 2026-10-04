@@ -328,6 +328,135 @@ describe('API client', () => {
     }
   });
 
+  it('names the field and reason behind a validation failure', async () => {
+    // Regression: the register form reported only the backend's generic
+    // "request validation failed" while the response body carried
+    // context.errors = [{field: "password", message: "...at least one letter and one digit"}].
+    // A user could not tell which field was wrong or how to fix it.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation(() =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify({
+              detail: 'request validation failed',
+              code: 'request_validation_error',
+              context: {
+                errors: [
+                  {
+                    field: 'password',
+                    message: 'Value error, password must contain at least one letter and one digit',
+                    type: 'value_error',
+                  },
+                ],
+              },
+            }),
+            { status: 422, headers: { 'Content-Type': 'application/json' } },
+          ),
+        ),
+      ),
+    );
+
+    const { api, ApiError } = await import('@/api/client');
+    const failure = (await api
+      .register({ email: 'a@b.com', username: 'u', password: 'abcdefgh' })
+      .catch((error: unknown) => error)) as InstanceType<typeof ApiError>;
+
+    expect(failure.status).toBe(422);
+    expect(failure.code).toBe('request_validation_error');
+    expect(failure.detail).toBe(
+      'password: Value error, password must contain at least one letter and one digit',
+    );
+  });
+
+  it('joins several field errors and counts the overflow', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation(() =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify({
+              detail: 'request validation failed',
+              code: 'request_validation_error',
+              context: {
+                errors: [
+                  { field: 'email', message: 'invalid email address' },
+                  { field: 'username', message: 'too short' },
+                  { field: 'password', message: 'needs a digit' },
+                  { field: 'full_name', message: 'too long' },
+                  { field: 'role', message: 'not a valid role' },
+                ],
+              },
+            }),
+            { status: 422, headers: { 'Content-Type': 'application/json' } },
+          ),
+        ),
+      ),
+    );
+
+    const { api, ApiError } = await import('@/api/client');
+    const failure = (await api
+      .register({ email: 'a@b.com', username: 'u', password: 'Ab1' })
+      .catch((error: unknown) => error)) as InstanceType<typeof ApiError>;
+
+    expect(failure.detail).toBe(
+      'email: invalid email address; username: too short; password: needs a digit (+2 more)',
+    );
+  });
+
+  it('falls back to the generic detail when no field errors are supplied', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation(() =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify({
+              detail: 'request validation failed',
+              code: 'request_validation_error',
+              context: { errors: [] },
+            }),
+            { status: 422, headers: { 'Content-Type': 'application/json' } },
+          ),
+        ),
+      ),
+    );
+
+    const { api, ApiError } = await import('@/api/client');
+    const failure = (await api
+      .register({ email: 'a@b.com', username: 'u', password: 'Ab1' })
+      .catch((error: unknown) => error)) as InstanceType<typeof ApiError>;
+
+    expect(failure.detail).toBe('request validation failed');
+  });
+
+  it('does not rewrite a domain error that merely uses status 422', async () => {
+    // 422 is also how the API reports "that email or username is already registered".
+    // That detail is already specific and must survive untouched.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation(() =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify({
+              detail: 'that email or username is already registered',
+              code: 'user_exists',
+              context: null,
+            }),
+            { status: 422, headers: { 'Content-Type': 'application/json' } },
+          ),
+        ),
+      ),
+    );
+
+    const { api, ApiError } = await import('@/api/client');
+    const failure = (await api
+      .register({ email: 'a@b.com', username: 'appu28', password: 'Ab1234' })
+      .catch((error: unknown) => error)) as InstanceType<typeof ApiError>;
+
+    expect(failure.code).toBe('user_exists');
+    expect(failure.detail).toBe('that email or username is already registered');
+  });
+
   it('explains a 502 from the dev proxy as "the API is not running"', async () => {
     // Regression: the Vite proxy returns 502 when the backend is down, which used to
     // surface as a bare gateway error and read like an application fault.

@@ -68,6 +68,33 @@ type Query = Record<string, string | number | boolean | undefined | null>;
 /** Statuses a gateway returns when it cannot reach the upstream API. */
 const UPSTREAM_UNREACHABLE = new Set([502, 503, 504]);
 
+interface FieldError {
+  field?: string;
+  message?: string;
+}
+
+/**
+ * Turn a FastAPI validation failure into something a person can act on.
+ *
+ * The backend already names the offending field - `{"detail": "request validation
+ * failed", "context": {"errors": [{"field": "password", "message": "..."}]}}` - but the
+ * generic `detail` on its own told a user nothing except that they had done something
+ * wrong. Report the field and the reason instead.
+ */
+function validationMessage(context: unknown): string | null {
+  if (typeof context !== 'object' || context === null) return null;
+  const errors = (context as { errors?: unknown }).errors;
+  if (!Array.isArray(errors) || errors.length === 0) return null;
+
+  const parts = errors.slice(0, 3).map((entry) => {
+    const { field, message } = (entry ?? {}) as FieldError;
+    const reason = message?.trim() || 'is invalid';
+    return field ? `${field}: ${reason}` : reason;
+  });
+  const shown = parts.join('; ');
+  return errors.length > 3 ? `${shown} (+${errors.length - 3} more)` : shown;
+}
+
 function buildUrl(path: string, query?: Query): string {
   const url = `${BASE_URL}${path}`;
   if (!query) return url;
@@ -153,9 +180,12 @@ async function request<T>(
 
   if (!response.ok) {
     const body = (payload ?? {}) as { detail?: string; code?: string; context?: unknown };
+    // Prefer the per-field reasons over a generic "request validation failed".
+    const fieldLevel =
+      body.code === 'request_validation_error' ? validationMessage(body.context) : null;
     throw new ApiError(
       response.status,
-      body.detail ?? `Request failed with status ${response.status}`,
+      fieldLevel ?? body.detail ?? `Request failed with status ${response.status}`,
       body.code,
       body.context,
     );
