@@ -19,47 +19,88 @@ registry rather than built on the host:
              └──────────────┘
 ```
 
-The compose file in this repository is the reference deployment. For a larger install,
-run the images directly on a managed platform (ECS, Cloud Run, Render, Fly) and point
-`DATABASE_URL` and `MLFLOW_TRACKING_URI` at managed services.
+The Compose file is the reference deployment. GitHub Actions builds separate API, web,
+and MLflow images and publishes them to GHCR. On a VPS, the deploy job copies the Compose
+file, migrates the database, and recreates the services. For a larger install, run the
+images directly on a managed platform and point `DATABASE_URL` and
+`MLFLOW_TRACKING_URI` at managed services.
 
 ## 2. First-time server setup
 
 ```bash
 # --- base OS and Docker -------------------------------------------------
-sudo apt update && sudo apt install -y docker.io docker-compose-v2 git
+sudo apt update && sudo apt install -y docker.io docker-compose-v2 curl
 sudo systemctl enable --now docker
 sudo usermod -aG docker "$USER" && newgrp docker
 
 # --- application --------------------------------------------------------
-sudo mkdir -p /opt/devinsight && sudo chown "$USER" /opt/devinsight
-git clone <your-repo> /opt/devinsight/devinsight
-cd /opt/devinsight/devinsight
+mkdir -p ~/devinsight
+cd ~/devinsight
+curl -fsSLo docker-compose.yml \
+  https://raw.githubusercontent.com/aparnaabi248-git/devinsight01/master/docker-compose.yml
+curl -fsSLo .env.example \
+  https://raw.githubusercontent.com/aparnaabi248-git/devinsight01/master/.env.example
 ```
 
 ## 3. Secrets
 
-Every secret comes from the environment. Never bake one into an image or commit one.
+The VPS runtime `.env` stays on the VPS; never commit it or bake it into an image.
 
 ```bash
-# .env on the host — chmod 600, owned by the deploy user
-cd /opt/devinsight/devinsight
+# .env on the VPS — chmod 600, owned by the deploy user
+cd ~/devinsight
 cp .env.example .env
+```
+
+Use a text editor to set `ENVIRONMENT=production`, `DEBUG=false`, a fresh `SECRET_KEY`,
+and a strong `POSTGRES_PASSWORD`. Set `CORS_ORIGINS` to the actual site origin if the
+frontend is served from a different origin. Then restrict the file:
+
+```bash
 chmod 600 .env
-echo "SECRET_KEY=$(openssl rand -hex 32)" >> .env
-echo "GITHUB_TOKEN=ghp_xxx" >> .env
 ```
 
 | Variable | How to obtain | Notes |
 |---|---|---|
 | `SECRET_KEY` | `openssl rand -hex 32` | The API **refuses to start** in production with the dev key |
-| `GITHUB_TOKEN` | GitHub → Settings → Developer settings → Fine-grained tokens | Read-only public-repo access. 5,000 req/hr vs 60 anonymous |
+| `GITHUB_TOKEN` | GitHub → Settings → Developer settings → Fine-grained tokens | Optional; read-only public-repo access. 5,000 req/hr vs 60 anonymous |
 | `POSTGRES_PASSWORD` | `openssl rand -base64 32` | Or use the managed instance's credential |
 | `AIRFLOW_FERNET_KEY` | `python -c "from cryptography.fernet import Fernet;print(Fernet.generate_key().decode())"` | Required if Airflow holds connections |
 
 Never expose `GITHUB_TOKEN` to the browser. The frontend bundle contains only a URL.
 
-## 4. Database
+## 4. GitHub Actions setup
+
+In the deployment repository's **Settings → Secrets and variables → Actions**, add these
+repository secrets:
+
+| Name | Value |
+|---|---|
+| `DEPLOY_HOST` | VPS public IP address or DNS name |
+| `DEPLOY_USER` | SSH account on the VPS |
+| `DEPLOY_SSH_KEY` | Private SSH key matching a public key in that account's `authorized_keys` |
+| `DEPLOY_KNOWN_HOSTS` | Verified SSH host-key line(s) for the VPS |
+
+Use a dedicated deployment SSH key. Verify the VPS host-key fingerprint using your
+provider's console before saving its `ssh-keyscan -H <host>` output as
+`DEPLOY_KNOWN_HOSTS`. Do not paste private keys into chat, source control, or `.env`.
+Optionally define the Actions environment variable `DEPLOY_URL` as the public HTTPS URL
+for the post-deployment smoke test and deployment link.
+
+The deploy job pulls the API, web, and MLflow images from
+`ghcr.io/<owner>/devinsight01`. Make those GHCR packages public after the first image
+build, or authenticate on the VPS with a GitHub token that has `read:packages` access
+before deployment. The workflow runs on a `v*` release tag or via **Actions → Deploy →
+Run workflow**. It transfers the Compose file, pulls the images, applies Alembic
+migrations, and waits for the API health check. Without `DEPLOY_HOST`, it runs the local
+CI smoke test instead.
+
+The web container listens on port `8080`; API, PostgreSQL, and MLflow host ports are
+bound to loopback only. For an internet-facing production site, put a TLS reverse proxy
+such as Caddy in front of `127.0.0.1:8080` and configure DNS and HTTPS before directing
+users to it. Do not expose ports `5432`, `5000`, or `8000` through the VPS firewall.
+
+## 5. Database
 
 ### Migrations
 
@@ -90,10 +131,10 @@ gunzip -c /var/backups/devinsight-2025-06-01.dump.gz \
 Point-in-in-time recovery: enable WAL archiving on the managed instance, or run
 `pgBackRest` for a self-hosted PostgreSQL.
 
-## 5. First release
+## 6. First release
 
 ```bash
-cd /opt/devinsight/devinsight
+cd ~/devinsight
 docker compose pull
 docker compose up -d
 docker compose ps                       # wait for db/api/web to report healthy
@@ -120,14 +161,13 @@ curl -s -X POST http://localhost:8000/api/ml/defect-risk \
   -d '{"repository":"pallets/click","changes":[{"path":"src/click/core.py","additions":180,"deletions":40}]}' | jq
 ```
 
-## 6. Rollout
+## 7. Rollout
 
 `docker-compose.yml` uses named volumes, so a rollout replaces containers without losing
 the ETL raw store, the trained artefacts, the reports or the MLflow store.
 
 ```bash
-cd /opt/devinsight/devinsight
-git pull --ff-only
+cd ~/devinsight
 docker compose run --rm api alembic upgrade head
 docker compose pull
 docker compose up -d --remove-orphans
@@ -135,8 +175,8 @@ docker image prune -f
 curl -fsS http://localhost:8000/api/health
 ```
 
-The automated path: push a `v*` tag and let `.github/workflows/deploy.yml` do this over
-SSH, gated on a health check.
+The automated path: push a `v*` tag or manually run `.github/workflows/deploy.yml`; it
+deploys over SSH and gates completion on a health check.
 
 ### Zero-downtime notes
 
@@ -144,7 +184,7 @@ The API is stateless, so it scales horizontally behind a load balancer. The comp
 uses `docker compose up -d`, which restarts containers in place — fine for a single node.
 For true zero downtime, run two API replicas and drain one at a time.
 
-## 7. Scaling
+## 8. Scaling
 
 | Symptom | Action |
 |---|---|
@@ -155,7 +195,7 @@ For true zero downtime, run two API replicas and drain one at a time.
 | `commits` table very large | Range-partition on `authored_at` (see `docs/DATABASE.md` §4) |
 | Slow trend queries | Pre-materialise `analytics_snapshots` per day instead of scanning facts |
 
-## 8. Monitoring
+## 9. Monitoring
 
 | Signal | Where | Action on breach |
 |---|---|---|
@@ -168,7 +208,7 @@ For true zero downtime, run two API replicas and drain one at a time.
 Ship logs to your aggregator with `LOG_JSON=true` (the logger already emits structured,
 redacted JSON).
 
-## 9. Backup and recovery targets
+## 10. Backup and recovery targets
 
 | Data | Method | RPO | RTO |
 |---|---|---|---|
@@ -177,7 +217,7 @@ redacted JSON).
 | MLflow store | File volume snapshot → object storage | 24 h | < 1 h |
 | Raw ETL data | Disposable — re-cloneable with `acquire.py` | n/a | Minutes |
 
-## 10. Security checklist
+## 11. Security checklist
 
 - [ ] `SECRET_KEY` is a fresh 32-byte random value, not the template default
 - [ ] `GITHUB_TOKEN` is fine-grained and read-only

@@ -528,9 +528,9 @@ Four services, one command: `docker compose up -d --build`.
 | `security` | Fail on committed GitHub tokens · fail on a committed `.env` · `pip-audit` · `npm audit` |
 
 **`.github/workflows/deploy.yml`** — on `v*` tags or manual dispatch: builds and pushes
-multi-arch images to GHCR, then deploys over SSH with `docker compose pull && up -d` and a
-health-gated smoke test. Without `DEPLOY_HOST` configured it falls back to a local
-compose smoke test, so the pipeline is still meaningful on a fork.
+separate API, web, and MLflow images to GHCR, then deploys over SSH, applies database
+migrations, and waits for the API health check. Without `DEPLOY_HOST` configured it
+falls back to a local compose smoke test, so the pipeline is still meaningful on a fork.
 
 ## 15. Deployment
 
@@ -538,9 +538,10 @@ See **[`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)** for the full runbook: VPS set
 secrets management, migrations, zero-downtime rollout, backup and restore, scaling, and
 monitoring.
 
-Quick path: tag a release, let the workflow build and push images, set the `DEPLOY_HOST`,
-`DEPLOY_USER`, `DEPLOY_SSH_KEY` and `SECRET_KEY` repository secrets, and point
-`DEPLOY_URL` at the host.
+Quick path: prepare a VPS and its runtime `.env`, set the `DEPLOY_HOST`, `DEPLOY_USER`,
+`DEPLOY_SSH_KEY`, and `DEPLOY_KNOWN_HOSTS` repository secrets, then run the **Deploy**
+workflow or push a `v*` release tag. See the runbook for GHCR package access and setup
+details.
 
 ## 16. Testing
 

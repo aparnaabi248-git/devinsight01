@@ -37,12 +37,40 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Image metadata
-        id: meta
+      - name: API image metadata
+        id: api-meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository }}
+          images: ghcr.io/${{ github.repository }}/api
           tags: |
+            type=ref,event=branch
+            type=ref,event=tag
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/') }}
+            type=sha,format=short
+
+      - name: Web image metadata
+        id: web-meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}/web
+          tags: |
+            type=ref,event=branch
+            type=ref,event=tag
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/') }}
+            type=sha,format=short
+
+      - name: MLflow image metadata
+        id: mlflow-meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}/mlflow
+          tags: |
+            type=ref,event=branch
+            type=ref,event=tag
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/') }}
@@ -54,8 +82,8 @@ jobs:
           context: .
           file: docker/backend.Dockerfile
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          tags: ${{ steps.api-meta.outputs.tags }}
+          labels: ${{ steps.api-meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -66,8 +94,19 @@ jobs:
           file: docker/frontend.Dockerfile
           push: true
           build-args: VITE_API_URL=/api
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          tags: ${{ steps.web-meta.outputs.tags }}
+          labels: ${{ steps.web-meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build & push MLflow image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/mlflow.Dockerfile
+          push: true
+          tags: ${{ steps.mlflow-meta.outputs.tags }}
+          labels: ${{ steps.mlflow-meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -86,7 +125,9 @@ jobs:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
           IMAGE_TAG: ${{ github.ref_name }}
+          IMAGE_PREFIX: ghcr.io/${{ github.repository }}
         run: |
           if [ -z "$DEPLOY_HOST" ]; then
             echo "::notice::DEPLOY_HOST is not configured; running a local smoke test instead."
@@ -106,28 +147,57 @@ jobs:
             exit 1
           fi
 
+          if [ -z "$DEPLOY_USER" ] || [ -z "$DEPLOY_KEY" ] || [ -z "$DEPLOY_KNOWN_HOSTS" ]; then
+            echo "::error::Set DEPLOY_USER, DEPLOY_SSH_KEY, and DEPLOY_KNOWN_HOSTS when DEPLOY_HOST is configured."
+            exit 1
+          fi
+
+          case "$IMAGE_TAG" in
+            ""|*[!A-Za-z0-9_.-]*)
+              echo "::error::IMAGE_TAG contains unsupported characters."
+              exit 1
+              ;;
+          esac
+
+          if [ -z "$IMAGE_PREFIX" ]; then
+            echo "::error::IMAGE_PREFIX is empty."
+            exit 1
+          fi
+
           mkdir -p ~/.ssh
           echo "$DEPLOY_KEY" > ~/.ssh/id_deploy
           chmod 600 ~/.ssh/id_deploy
-          ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
 
-          ssh "$DEPLOY_USER@$DEPLOY_HOST" <<EOF
+          ssh -o IdentitiesOnly=yes -i ~/.ssh/id_deploy "$DEPLOY_USER@$DEPLOY_HOST" 'mkdir -p ~/devinsight'
+          scp -o IdentitiesOnly=yes -i ~/.ssh/id_deploy docker-compose.yml "$DEPLOY_USER@$DEPLOY_HOST:devinsight/docker-compose.yml"
+
+          ssh -o IdentitiesOnly=yes -i ~/.ssh/id_deploy "$DEPLOY_USER@$DEPLOY_HOST" \
+            "IMAGE_TAG='$IMAGE_TAG' IMAGE_PREFIX='$IMAGE_PREFIX' bash -s" <<'EOF'
             set -e
             cd ~/devinsight
-            git pull --ff-only
-            export IMAGE_TAG=$IMAGE_TAG
-            docker compose pull
+            export IMAGE_TAG IMAGE_PREFIX
+            docker compose pull api web mlflow
+            docker compose run --rm api alembic upgrade head
             docker compose up -d --remove-orphans
-            docker compose exec -T db pg_isready -U devinsight
-            for i in \$(seq 1 30); do
-              if curl -fsS http://localhost:8000/api/health; then break; fi
+            docker compose ps
+            for i in $(seq 1 30); do
+              if curl -fsS http://localhost:8000/api/health; then
+                echo "Deployment health check passed."
+                exit 0
+              fi
               sleep 4
             done
-            docker image prune -f
+            echo "Health check did not pass within 120s." >&2
+            docker compose logs --tail=100
+            exit 1
           EOF
           echo "Deployed $IMAGE_TAG to $DEPLOY_HOST"
 
       - name: Post-deploy smoke test
+        env:
+          DEPLOY_URL: ${{ vars.DEPLOY_URL }}
         run: |
           curl -fsS "${DEPLOY_URL:-http://localhost:8000}/api/health" || \
             echo "::warning::Remote smoke test skipped (DEPLOY_URL not set)"

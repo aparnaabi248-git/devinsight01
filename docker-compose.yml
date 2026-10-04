@@ -21,7 +21,7 @@ services:
     volumes:
       - db_data:/var/lib/postgresql/data
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-devinsight} -d ${POSTGRES_DB:-devinsight}"]
       interval: 10s
@@ -31,6 +31,7 @@ services:
     networks: [devinsight]
 
   api:
+    image: ${GHCR_IMAGE_PREFIX:-ghcr.io/aparnaabi248-git/devinsight01}/api:${IMAGE_TAG:-latest}
     build:
       context: .
       dockerfile: docker/backend.Dockerfile
@@ -60,10 +61,11 @@ services:
       - ml_artifacts:/app/ml/artifacts
       - ml_reports:/app/ml/reports
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     networks: [devinsight]
 
   web:
+    image: ${GHCR_IMAGE_PREFIX:-ghcr.io/aparnaabi248-git/devinsight01}/web:${IMAGE_TAG:-latest}
     build:
       context: .
       dockerfile: docker/frontend.Dockerfile
@@ -78,6 +80,7 @@ services:
     networks: [devinsight]
 
   mlflow:
+    image: ${GHCR_IMAGE_PREFIX:-ghcr.io/aparnaabi248-git/devinsight01}/mlflow:${IMAGE_TAG:-latest}
     build:
       context: .
       dockerfile: docker/mlflow.Dockerfile
@@ -88,7 +91,7 @@ services:
     volumes:
       - mlflow_data:/mlflow
     ports:
-      - "5000:5000"
+      - "127.0.0.1:5000:5000"
     networks: [devinsight]
 
   # Optional ETL scheduler. Start with:
@@ -135,7 +138,7 @@ services:
     environment:
       MLFLOW_TRACKING_URI: http://mlflow:5000
     ports:
-      - "5001:5000"
+      - "127.0.0.1:5001:5000"
     networks: [devinsight]
 
 volumes:
