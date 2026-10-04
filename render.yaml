@@ -30,8 +30,9 @@ services:
       - key: LOG_JSON
         value: "true"
 
-  - type: static
+  - type: web
     name: devinsight-web
+    runtime: static
     buildCommand: npm ci --prefix frontend && npm run build --prefix frontend
     staticPublishPath: ./frontend/dist
     envVars:
