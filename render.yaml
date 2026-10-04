@@ -6,10 +6,7 @@ services:
     region: oregon
     dockerContext: .
     dockerfilePath: ./docker/backend.Dockerfile
-    dockerCommand: >-
-      sh -c 'export CORS_ORIGINS="https://${FRONTEND_HOST}" &&
-      alembic upgrade head &&
-      exec uvicorn app.main:app --host 0.0.0.0 --port "${PORT:-10000}" --proxy-headers'
+    dockerCommand: /usr/local/bin/render-start.sh
     healthCheckPath: /api/health
     envVars:
       - key: ENVIRONMENT
@@ -22,11 +19,8 @@ services:
         fromDatabase:
           name: devinsight-db
           property: connectionString
-      - key: FRONTEND_HOST
-        fromService:
-          type: web
-          name: devinsight-web
-          property: host
+      - key: CORS_ORIGINS
+        value: https://devinsight-web.onrender.com
       - key: LOG_JSON
         value: "true"
 

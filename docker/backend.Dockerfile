@@ -38,6 +38,7 @@ COPY backend/app /app/app
 COPY backend/alembic /app/alembic
 COPY backend/alembic.ini /app/alembic.ini
 COPY backend/scripts /app/scripts
+COPY --chmod=755 docker/render-start.sh /usr/local/bin/render-start.sh
 
 # The ML package is imported at runtime by the inference service. This also
 # brings `ml/artifacts/` (the four trained models) when they exist.
