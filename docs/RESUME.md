@@ -7,12 +7,13 @@ Platform** · *Full-stack · Machine Learning · Data Engineering*
 `FastAPI` `PostgreSQL` `React` `TypeScript` `scikit-learn` `XGBoost` `MLflow` `Airflow` `Docker` `GitHub Actions`
 
 > Built an end-to-end platform that ingests real GitHub repository history
-> (**23,784 commits / 41,358 file diffs** across 5 OSS projects), engineers **49
-> leakage-guarded features**, trains and evaluates **four machine-learning models**
-> (defect risk, issue classification, issue priority, effort estimation) against
-> cross-validated baselines, and serves them through a **16-table PostgreSQL** backend and
-> a **7-view React analytics dashboard**, tracked with MLflow and deployed via Docker
-> Compose and GitHub Actions.
+> (**23,784 commits / 41,358 file diffs** across 5 OSS projects, of which **4,513
+> commits** are loaded into PostgreSQL as the most recent slice per repository),
+> engineers **49 leakage-guarded features**, trains and evaluates **four
+> machine-learning models** (defect risk, issue classification, issue priority, effort
+> estimation) against cross-validated baselines, and serves them through a **19-table
+> PostgreSQL** backend and a **7-view React analytics dashboard**, tracked with MLflow
+> and deployed via Docker Compose and GitHub Actions.
 
 ## 2. Longer paragraph
 
@@ -30,7 +31,7 @@ implausible.
 
 ## 3. Star bullet points (résumé-ready)
 
-- Designed a **16-table normalised PostgreSQL schema** with composite natural keys that
+- Designed a **19-table normalised PostgreSQL schema** with composite natural keys that
   make ETL ingestion idempotent (`ON CONFLICT` upserts), FK/GIN/composite indexes, and a
   **schema-drift gate** that diffs the live database against the SQLAlchemy metadata in CI.
 - Built a **leakage-safe feature pipeline** in which every historical feature is computed
@@ -46,7 +47,7 @@ implausible.
 - Trained and compared **11 candidate models across 4 tasks**, selecting on cross-validated
   macro-F1 (or MAE for regression) and reporting held-out metrics, confusion matrices,
   per-class breakdowns and feature importance.
-- Shipped **196 backend/ML tests and 36 frontend tests**, including a
+- Shipped **205 backend/ML tests and 48 frontend tests**, including a
   **trained-model quality gate** that rejects undocumented models, single-candidate
   "selections", and metrics outside plausible ranges — the check that catches a hard-coded
   placeholder masquerading as a measurement.
@@ -110,13 +111,14 @@ identical to correct behaviour in a demo.
 
 | Metric | Value |
 |---|---|
-| Real commits ingested | 23,784 across 5 repositories |
-| Real per-file diffs | 41,358 |
+| Real commits **trained on** | 23,784 across 5 repositories (full cloned history) |
+| Real commits **in the database** | 4,513 — `seed_local.py` keeps the 900 most recent per repository |
+| Real per-file diffs (trained / in DB) | 41,358 / 14,259 |
 | Real issues in the text corpus | 3,569 |
 | Engineered features (defect model) | 49 |
 | Candidate models compared | 11 (4 + 2 + 2 + 3) |
 | Database tables | 19 |
-| Backend + ML tests | 196 |
+| Backend + ML tests | 205 |
 | Frontend tests | 36 |
 | Defect-label positive rate | 23.7 % |
 | Defect model ROC-AUC (held-out) | 0.85 |

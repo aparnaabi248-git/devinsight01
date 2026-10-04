@@ -191,6 +191,14 @@ All real, all publicly available, all reproducible.
 | **Total** | **23,784 commits, 41,358 file changes** | |
 | Public issue corpus | 3,569 real GitHub issues (title, body, labels, comments, timestamps) | public dataset mirror |
 
+**Two different counts, and the difference matters.** The 23,784 commits above are the
+complete cloned history, and they are what the models were **trained** on. The
+application database is populated by `scripts/seed_local.py`, which keeps the **900 most
+recent commits per repository** so the demo stays quick — so PostgreSQL holds **4,513
+commits and 14,259 file changes**, which is what every number on the dashboard is
+computed from. Nothing is fabricated; the database is a deliberate recent slice of the
+same real history. Raise `MAX_PER_REPO` in that script and re-run it to load more.
+
 **Why two sources.** The git transport gives the *complete* per-file diffstat history
 (LOC, authorship, timing) that the REST API only approximates. The issue corpus carries
 the *text and labels* that git history cannot. Using the REST API for bulk history would
