@@ -28,6 +28,7 @@ import {
   Th,
 } from '@/components/ui';
 import { hours, number, percent, periodLabel, shortDate, truncate } from '@/lib/format';
+import { defaultRepositoryId } from '@/lib/repositories';
 import { theme } from '@/lib/theme';
 import type { Granularity } from '@/types/api';
 
@@ -62,7 +63,7 @@ export default function AnalyticsPage() {
     queryKey: ['repositories', 'analytics'],
     queryFn: () => api.repositories({ page_size: 100 }),
   });
-  const repoId = params.get('repo') ?? String(reposQuery.data?.items[0]?.id ?? '');
+  const repoId = params.get('repo') ?? String(defaultRepositoryId(reposQuery.data?.items) ?? '');
 
   const analyticsQuery = useQuery({
     queryKey: ['analytics', repoId],

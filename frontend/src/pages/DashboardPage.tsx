@@ -39,6 +39,7 @@ import {
   StatTile,
 } from '@/components/ui';
 import { compactNumber, hours, number, percent, periodLabel, relativeTime } from '@/lib/format';
+import { defaultRepositoryId } from '@/lib/repositories';
 import { theme } from '@/lib/theme';
 import type { Repository } from '@/types/api';
 
@@ -76,13 +77,11 @@ export default function DashboardPage() {
     if (selectedId !== null) {
       return repositories.find((r) => r.id === selectedId) ?? repositories[0];
     }
-    // Default to the repository with the most history rather than the most recently
-    // synced one. Ordering by `last_synced_at` puts whatever you just ingested first,
-    // which is often a freshly added repo with a handful of commits - every tile then
-    // reads zero and the landing view looks broken. The user can still pick any repo.
-    return repositories.reduce((best, repo) =>
-      repo.ingested_commits > best.ingested_commits ? repo : best,
-    );
+    // Default to the repository with the most history, not the most recently synced
+    // one - see defaultRepositoryId() for why, and so the three repository-scoped
+    // views agree on what to show first.
+    const defaultId = defaultRepositoryId(repositories);
+    return repositories.find((r) => r.id === defaultId) ?? repositories[0];
   }, [repositories, selectedId]);
 
   const analyticsQuery = useQuery({

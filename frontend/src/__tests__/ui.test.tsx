@@ -5,6 +5,8 @@ import { Badge, Button, EmptyState, ErrorState, ProgressBar, StatTile } from '@/
 import { compactNumber, hours, periodLabel, percent, shortSha, truncate } from '@/lib/format';
 import { riskTone } from '@/lib/theme';
 import { parseChanges } from '@/lib/parseChanges';
+import { defaultRepositoryId } from '@/lib/repositories';
+import type { Repository } from '@/types/api';
 
 describe('StatTile', () => {
   it('renders a label, value and hint', () => {
@@ -359,5 +361,50 @@ describe('API client', () => {
     expect(url).toContain('page=1');
     expect(url).not.toContain('search=');
     expect(url).not.toContain('language=');
+  });
+});
+
+describe('defaultRepositoryId', () => {
+  const repo = (id: number, ingested_commits: number) =>
+    ({ id, ingested_commits }) as Repository;
+
+  it('picks the repository with the most ingested history', () => {
+    // Regression: Analytics and Contributors took `items[0]`, which is alphabetical -
+    // so they opened on a freshly added 2-commit repo while the Dashboard showed
+    // psf/requests. Contributors rendered "1 contributor, High bus factor risk".
+    const items = [
+      repo(8, 2),
+      repo(5, 900),
+      repo(1, 640),
+    ];
+    expect(defaultRepositoryId(items)).toBe(5);
+  });
+
+  it('handles an empty or missing list', () => {
+    expect(defaultRepositoryId([])).toBeUndefined();
+    expect(defaultRepositoryId(undefined)).toBeUndefined();
+  });
+
+  it('does not mutate the input order', () => {
+    const items = [repo(8, 2), repo(5, 900)];
+    defaultRepositoryId(items);
+    expect(items.map((r) => r.id)).toEqual([8, 5]);
+  });
+
+  it('falls back to the first item when every repository is empty', () => {
+    // Nothing ingested anywhere: still show something rather than an empty page.
+    const items = [repo(8, 0), repo(5, 0)];
+    expect(defaultRepositoryId(items)).toBe(5);
+  });
+
+  it('breaks a tie on the lowest id, so every page agrees', () => {
+    // seed_local.py caps ingestion at 900 commits per repository, so the five OSS
+    // repositories tie exactly. Each page fetches a different sort order, so without a
+    // deterministic tie-break the Dashboard opened on psf/requests while Analytics and
+    // Contributors opened on pallets/flask.
+    const tied = [repo(8, 900), repo(5, 900), repo(2, 900), repo(9, 900)];
+    expect(defaultRepositoryId(tied)).toBe(2);
+    // Same answer no matter how the API sorted the list.
+    expect(defaultRepositoryId([...tied].reverse())).toBe(2);
   });
 });

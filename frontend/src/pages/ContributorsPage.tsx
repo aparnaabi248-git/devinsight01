@@ -17,6 +17,7 @@ import {
   Th,
 } from '@/components/ui';
 import { compactNumber, number, relativeTime, shortDate } from '@/lib/format';
+import { defaultRepositoryId } from '@/lib/repositories';
 import { theme } from '@/lib/theme';
 
 export default function ContributorsPage() {
@@ -25,7 +26,7 @@ export default function ContributorsPage() {
     queryKey: ['repositories', 'contributors'],
     queryFn: () => api.repositories({ page_size: 100 }),
   });
-  const repoId = params.get('repo') ?? String(reposQuery.data?.items[0]?.id ?? '');
+  const repoId = params.get('repo') ?? String(defaultRepositoryId(reposQuery.data?.items) ?? '');
 
   const contributorsQuery = useQuery({
     queryKey: ['contributors', repoId],
